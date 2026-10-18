@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mrl-app-shell-v2';
+const CACHE_NAME = 'mrl-app-shell-v3';
 const APP_FILES = [
   './',
   './index.html',
