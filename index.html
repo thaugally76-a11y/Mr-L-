@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Mr L</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#010a04">
+<meta name="description" content="Mr L — Cambridge A-Level Chemistry, Physics and Maths study assistant">
+<link rel="manifest" href="manifest.json">
+<style>
+:root{color-scheme:dark;--bg:#010a04;--pn:rgba(2,16,8,.8);--ac:#00ff6a;--tx:#c8ffdc;--dim:#5f9c78;--ok:#2dffa0;--no:#ff4d6d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+#rain{position:fixed;inset:0;z-index:0}
+#app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;max-width:900px;margin:auto}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px}
+h1{margin:0;font-size:20px;letter-spacing:4px;color:var(--ac);text-shadow:0 0 12px var(--ac)}
+nav{display:flex;gap:6px;overflow-x:auto;padding:0 14px 8px}
+nav button,.b{background:var(--pn);border:1px solid #1a3c70;color:var(--tx);padding:8px 12px;border-radius:8px;font:inherit;cursor:pointer;white-space:nowrap}
+nav button.on,.b:hover{border-color:var(--ac);box-shadow:0 0 10px var(--ac);color:#fff}
+main{flex:1;overflow-y:auto;padding:0 14px 14px}
+.card{background:var(--pn);border:1px solid #1a3c70;border-radius:12px;padding:14px;margin-bottom:12px;backdrop-filter:blur(4px)}
+select,input,textarea{background:#030a18;border:1px solid #1a3c70;color:var(--tx);border-radius:8px;padding:9px;font:inherit}
+textarea,input.w{width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.msg{padding:10px 12px;border-radius:10px;margin-bottom:8px;white-space:pre-wrap}
+.me{background:#0b2a55;margin-left:20%}.ai{background:#06142b;border:1px solid #12305c;margin-right:8%}
+.bar{height:8px;background:#0a1a33;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#1a5fd0,#2dffa0)}
+.opt{display:block;width:100%;text-align:left;margin:6px 0}
+.opt.r{border-color:var(--ok);box-shadow:0 0 10px var(--ok)}.opt.w{border-color:var(--no)}
+.dim{color:var(--dim);font-size:13px}
+.rip{position:fixed;border:2px solid var(--ac);border-radius:50%;pointer-events:none;z-index:9;animation:rp .7s ease-out forwards}
+@keyframes rp{from{width:0;height:0;opacity:1;margin:0}to{width:90px;height:90px;opacity:0;margin:-45px 0 0 -45px}}
+nav button,.b,.card,select,input,textarea,.ai{border-color:#0f4a24}
+select,input,textarea{background:#020d06}.me{background:#0a3a1c}.ai{background:#04140a}
+.bar{background:#06200f}.bar i{background:linear-gradient(90deg,#0a8a3a,#7dffb0)}
+#globe{position:fixed;inset:0;z-index:0;pointer-events:none}
+</style>
+<!-- MathJax renders LaTeX such as $$...$$ and \( ... \) as readable equations. -->
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  startup: { typeset: false }
+};
+</script>
+<script async id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head><body>
+<canvas id="rain"></canvas><canvas id="globe"></canvas>
+<div id="app">
+<header><h1>MR L</h1><span class="dim" id="st">// online</span></header>
+<nav id="nav"></nav><main id="v"></main>
+</div>
+<script>
+const SUBJ={Chemistry:["Atomic structure","Moles & stoichiometry","Chemical bonding","States of matter","Chemical energetics","Electrochemistry","Equilibria","Reaction kinetics","Periodicity","Group 2 & 17","Nitrogen & sulfur","Organic basics","Hydrocarbons","Halogen compounds","Hydroxy compounds","Carbonyl compounds","Carboxylic acids","Nitrogen compounds","Polymerisation","Analytical techniques","Transition elements"],
+Physics:["Kinematics","Dynamics","Forces & moments","Work, energy, power","Motion in a circle","Gravitational fields","Oscillations","Waves","Superposition","Electric fields","Current electricity","D.C. circuits","Capacitance","Electromagnetism","Alternating currents","Thermal physics","Ideal gases","Quantum physics","Nuclear physics","Medical imaging"],
+Maths:["Quadratics & functions","Coordinate geometry","Circular measure","Trigonometry","Series & binomial","Differentiation","Integration","Numerical methods","Vectors","Complex numbers","Differential equations","Partial fractions","Probability","Statistics & distributions","Mechanics"]};
+Object.assign(SUBJ,{Chemistry:["1 Atomic structure","2 Atoms, molecules and stoichiometry","3 Chemical bonding","4 States of matter","5 Chemical energetics","6 Electrochemistry","7 Equilibria","8 Reaction kinetics","9 Periodic Table: chemical periodicity","10 Group 2","11 Group 17","12 Nitrogen and sulfur","13 Intro to AS organic chemistry","14 Hydrocarbons","15 Halogen compounds","16 Hydroxy compounds","17 Carbonyl compounds","18 Carboxylic acids and derivatives","19 Nitrogen compounds","20 Polymerisation","21 Organic synthesis","22 Analytical techniques","23 Chemical energetics (A Level)","24 Electrochemistry (A Level)","25 Equilibria (A Level)","26 Reaction kinetics (A Level)","27 Group 2 (A Level)","28 Chemistry of transition elements","29 Intro to A Level organic chemistry","30 Hydrocarbons (A Level)","31 Halogen compounds (A Level)","32 Hydroxy compounds (A Level)","33 Carboxylic acids and derivatives (A Level)","34 Nitrogen compounds (A Level)","35 Polymerisation (A Level)","36 Organic synthesis (A Level)","37 Analytical techniques (A Level)"],
+Physics:["1 Physical quantities and units","2 Kinematics","3 Dynamics","4 Forces, density and pressure","5 Work, energy and power","6 Deformation of solids","7 Waves","8 Superposition","9 Electricity","10 D.C. circuits","11 Particle physics","12 Motion in a circle","13 Gravitational fields","14 Temperature","15 Ideal gases","16 Thermodynamics","17 Oscillations","18 Electric fields","19 Capacitance","20 Magnetic fields and electromagnetic induction","21 Alternating currents","22 Quantum physics","23 Nuclear physics","24 Medical physics","25 Astronomy and cosmology"],
+Maths:["P1 Quadratics","P1 Functions","P1 Coordinate geometry","P1 Circular measure","P1 Trigonometry","P1 Series","P1 Differentiation","P1 Integration","P3 Algebra (modulus, polynomials, partial fractions, binomial)","P3 Logarithmic and exponential functions","P3 Trigonometry","P3 Differentiation","P3 Integration","P3 Numerical solution of equations","P3 Vectors","P3 Differential equations","P3 Complex numbers","M1 Forces and equilibrium","M1 Kinematics of motion in a straight line","M1 Momentum","M1 Newton’s laws of motion","M1 Energy, work and power","S1 Representation of data","S1 Permutations and combinations","S1 Probability","S1 Discrete random variables","S1 The normal distribution","S2 The Poisson distribution","S2 Linear combinations of random variables","S2 Continuous random variables","S2 Sampling and estimation","S2 Hypothesis tests"]});
+const $=s=>document.querySelector(s);
+let D;try{D=JSON.parse(localStorage.getItem("mrl")||"{}")}catch(e){D={}}
+D.bank=D.bank||{};D.stat=D.stat||{};
+const save=()=>{try{localStorage.setItem("mrl",JSON.stringify(D))}catch(e){}};
+let sample=null,hist=[];
+const SYS="You are Mr L, a witty, loyal, composed AI butler in the style of JARVIS from Iron Man 2, serving a Cambridge A-Level student (Chemistry 9701, Physics 9702, Maths 9709) in Mauritius. Address them as 'sir' or 'ma’am' sparingly. You have PhD-level depth. Be accurate; say so when unsure. All exam-style content must follow Cambridge conventions (command words, marks in brackets, structured parts) and stay within the syllabus. ";
+// Standalone Gemini connection. The user enters their own API key in Settings.
+sample = standaloneGemini;
+async function standaloneGemini(input, options={}) {
+  const apiKey = localStorage.getItem("mrl_gemini_key");
+  if (!apiKey) throw new Error("No Gemini API key saved. Open Settings and add your key.");
+  const contents = (Array.isArray(input) ? input : [{role:"user", content:String(input)}])
+    .map(m => ({role: (m.role === "assistant" || m.role === "model") ? "model" : "user",
+      parts:[{text:String(m.content ?? "")}]}));
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
+    method:"POST", headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+    body:JSON.stringify({contents, generationConfig:{temperature:0.7}})
+  });
+  const data = await response.json().catch(()=>({}));
+  if (!response.ok) throw new Error(data?.error?.message || ("Gemini request failed ("+response.status+")."));
+  const text = (data.candidates?.[0]?.content?.parts || []).map(p=>p.text||"").join("");
+  if (!text) throw new Error("Gemini returned no text. Try again or check your API quota.");
+  if (typeof options.onText === "function") options.onText({text});
+  return {text};
+}
+async function ask(p,o={}){if(!sample)throw new Error("AI link unavailable.");return sample(SYS+"\\n\\n"+p,{cache:false,...o})}
+function settings(){
+  const existing=localStorage.getItem("mrl_gemini_key")||"";
+  $("#v").innerHTML=`<div class="card">
+    <b style="color:var(--ac)">AI connection</b>
+    <p class="dim">Mr L uses Gemini instead of Claude's Artifact runtime. Create a key in Google AI Studio, then paste it below. Your key is stored in this browser on this device; it is not included in the app files.</p>
+    <p><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--ac)">Open Google AI Studio — API keys ↗</a></p>
+    <label for="gemkey">Gemini API key</label>
+    <input id="gemkey" class="w" type="password" autocomplete="off" placeholder="Paste your API key here" value="${existing.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">
+    <div class="row" style="margin-top:10px"><button class="b" onclick="saveGemKey()">Save key</button><button class="b" onclick="testGemKey()">Test connection</button><button class="b" onclick="clearGemKey()">Forget key</button></div>
+    <div id="keystatus" class="dim">Key ${existing?"saved on this device":"not set"}.</div>
+    <p class="dim">Security: this is a personal prototype. A key used in a browser can be exposed to someone with access to this device/browser. Restrict it to the Gemini API, monitor quota, and do not publish a shared app with a private key embedded in it.</p>
+  </div>`;
+}
+function saveGemKey(){
+  const k=$("#gemkey").value.trim();
+  if(!k){$("#keystatus").textContent="Paste a key first.";return}
+  localStorage.setItem("mrl_gemini_key",k);
+  $("#keystatus").textContent="Key saved in this browser. Tap Test connection.";
+  $("#st").textContent="// Gemini key saved";
+}
+function clearGemKey(){
+  localStorage.removeItem("mrl_gemini_key");
+  $("#gemkey").value="";
+  $("#keystatus").textContent="Key removed from this browser.";
+  $("#st").textContent="// AI key not set";
+}
+async function testGemKey(){
+  const k=$("#gemkey").value.trim();
+  if(!k){$("#keystatus").textContent="Paste a key first.";return}
+  localStorage.setItem("mrl_gemini_key",k);
+  $("#keystatus").textContent="Testing connection…";
+  try{
+    const r=await standaloneGemini("Reply with exactly: Mr L connected.",{});
+    $("#keystatus").textContent="Connection successful: "+r.text;
+    $("#st").textContent="// Gemini connected";
+  }catch(e){$("#keystatus").textContent="Connection failed: "+e.message}
+}
+/* matrix rain */
+const cv=$("#rain"),cx=cv.getContext("2d");let cols=[];
+function rs(){cv.width=innerWidth;cv.height=innerHeight;cols=Array(Math.ceil(cv.width/16)).fill(0).map(()=>Math.random()*50)}
+addEventListener("resize",rs);rs();
+setInterval(()=>{cx.fillStyle="rgba(1,10,4,.12)";cx.fillRect(0,0,cv.width,cv.height);cx.font="14px monospace";
+cols.forEach((y,i)=>{cx.fillStyle=Math.random()>.97?"#caffdc":"#0fa84a";cx.beginPath();cx.arc(i*16+8,y*16,Math.random()>.9?2.4:1.5,0,7);cx.fill();cols[i]=y*16>cv.height&&Math.random()>.975?0:y+1})},55);
+addEventListener("pointerdown",e=>{const r=document.createElement("div");r.className="rip";r.style.left=e.clientX+"px";r.style.top=e.clientY+"px";document.body.appendChild(r);setTimeout(()=>r.remove(),700)});
+/* globe */
+const gc=$("#globe"),gx=gc.getContext("2d"),P=[];
+for(let i=0;i<900;i++){const y=1-2*(i+.5)/900,r=Math.sqrt(1-y*y),a=i*2.39996;P.push([Math.cos(a)*r,y,Math.sin(a)*r])}
+let ry=0,rx=.4,vy=.004,vx=0,dg=false,lx=0,ly=0;
+function gs(){gc.width=innerWidth;gc.height=innerHeight}addEventListener("resize",gs);gs();
+addEventListener("pointerdown",e=>{dg=true;lx=e.clientX;ly=e.clientY});
+addEventListener("pointerup",()=>dg=false);addEventListener("pointercancel",()=>dg=false);
+addEventListener("pointermove",e=>{if(!dg)return;vy=(e.clientX-lx)*.004;vx=(e.clientY-ly)*.004;lx=e.clientX;ly=e.clientY});
+function gd(){gx.clearRect(0,0,gc.width,gc.height);ry+=vy;rx+=vx;vx*=.95;if(!dg)vy+=(.004-vy)*.02;
+const R=Math.min(gc.width,gc.height)*.36,cx0=gc.width/2,cy0=gc.height/2,cr=Math.cos(rx),sr=Math.sin(rx),cY=Math.cos(ry),sY=Math.sin(ry);
+for(const p of P){let x=p[0]*cY+p[2]*sY,z=-p[0]*sY+p[2]*cY,y=p[1]*cr-z*sr;z=p[1]*sr+z*cr;const d=(z+1)/2;
+gx.fillStyle="rgba(0,255,106,"+(.12+.7*d)+")";gx.beginPath();gx.arc(cx0+x*R,cy0+y*R,.8+1.6*d,0,7);gx.fill()}
+gx.strokeStyle="rgba(0,255,106,.25)";gx.lineWidth=1;gx.beginPath();gx.arc(cx0,cy0,R,0,7);gx.stroke();requestAnimationFrame(gd)}gd();
+/* nav */
+const T={chat:"Mr L",elite:"Elite",cross:"Crossover",drill:"Drills",vault:"Vault",trends:"Trends",syl:"Syllabus",settings:"Settings"};let tab="chat";
+function nav(){$("#nav").innerHTML=Object.entries(T).map(([k,v])=>`<button class="${k==tab?"on":""}" onclick="go('${k}')">${v}</button>`).join("")}
+function go(t){tab=t;nav();({chat,elite,cross,drill,vault,trends,syl:syl2,settings})[t]()}
+const so=()=>Object.keys(SUBJ).map(s=>`<option>${s}</option>`).join("");
+const chs=s=>SUBJ[s].map(c=>`<option>${c}</option>`).join("");
+function fillCh(sel,ch){$(ch).innerHTML=chs($(sel).value)}
+function md(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+/* Render LaTeX after dynamic content changes, without repeatedly typesetting every streamed token. */
+let mathRenderTimer=null, mathRendering=false;
+function renderMrLMath(){
+  if(mathRendering || !window.MathJax || !window.MathJax.typesetPromise) return;
+  const root=$("#v"); if(!root) return;
+  mathRendering=true;
+  try{window.MathJax.typesetClear([root]);
+    window.MathJax.typesetPromise([root]).catch(()=>{}).finally(()=>{mathRendering=false;});
+  }catch(_){mathRendering=false;}
+}
+function queueMrLMath(){clearTimeout(mathRenderTimer);mathRenderTimer=setTimeout(renderMrLMath,650)}
+const mathObserver=new MutationObserver(records=>{
+  const relevant=records.some(m=>{
+    const t=m.target; const el=t.nodeType===1?t:t.parentElement;
+    if(el && el.closest && el.closest('mjx-container')) return false;
+    return [...(m.addedNodes||[])].some(n=>!(n.nodeType===1 && (n.matches('mjx-container') || n.closest('mjx-container')))) || m.type==='characterData';
+  });
+  if(relevant) queueMrLMath();
+});
+const mathRoot=$("#v"); if(mathRoot) mathObserver.observe(mathRoot,{childList:true,subtree:true,characterData:true});
+window.addEventListener('load',()=>setTimeout(queueMrLMath,1200));
+/* chat */
+function chat(){$("#v").innerHTML=`<div id="log"></div><div class="row" style="position:sticky;bottom:0"><textarea id="q" rows="2" placeholder="Ask Mr L anything…"></textarea><button class="b" onclick="send()">Send</button></div>`;
+hist.forEach(m=>add(m.role=="user"?"me":"ai",m.content));if(!hist.length)add("ai","Good day. Mr L at your service. Chemistry, Physics, Maths: what shall we conquer first?")}
+function add(c,t){const d=document.createElement("div");d.className="msg "+c;d.textContent=t;$("#log").appendChild(d);$("#v").scrollTop=1e9;return d}
+async function send(){const q=$("#q").value.trim();if(!q)return;$("#q").value="";add("me",q);hist.push({role:"user",content:q});const el=add("ai","Thinking…");
+try{const msgs=hist.slice(-12).map(m=>({role:m.role,content:m.content}));msgs[0]={role:"user",content:SYS+"\n\n"+msgs[0].content};
+const r=await sample(msgs,{cache:false,modelTier:"complex",onText:({text})=>{el.textContent=text;$("#v").scrollTop=1e9}});hist.push({role:"assistant",content:r.text});el.textContent=r.text}catch(e){el.textContent="Apologies: "+(e.message||"link failed");hist.pop()}}
+/* generator pages */
+function gen(kind){return`<div class="card"><div class="row"><select id="s" onchange="fillCh('#s','#c')">${so()}</select><select id="c">${chs("Chemistry")}</select><button class="b" onclick="run('${kind}')">Generate</button></div><div id="out" class="dim">Ready when you are.</div></div>`}
+function elite(){$("#v").innerHTML=gen("elite")}
+function cross(){$("#v").innerHTML=`<div class="card"><div class="row"><select id="s1">${so()}</select><select id="s2"><option>Maths</option><option>Chemistry</option><option>Physics</option></select><input id="t" class="w" placeholder="Optional: topic, e.g. integration + equilibria"><button class="b" onclick="run('cross')">Generate</button></div><div id="out" class="dim">Ready when you are.</div></div>`}
+async function run(k){const o=$("#out");o.textContent="Composing a worthy challenge…";let p;
+if(k=="elite")p=`Write ONE extremely hard, elite Cambridge A-Level ${$("#s").value} question on "${$("#c").value}". It must require deep chapter knowledge plus logical, out-of-the-box thinking, in strict Cambridge structured style (parts (a),(b),(c) with marks), fully within the syllabus. Then, after a line '=== MARK SCHEME ===', give a full mark scheme with method marks (M), accuracy (A), and key examiner notes.`;
+else p=`Write ONE hard Cambridge-style crossover question combining ${$("#s1").value} and ${$("#s2").value}${$("#t").value?" focusing on "+$("#t").value:""}, where answering needs real A-Level Maths techniques (e.g. integration, differential equations, partial fractions, binomial expansion) applied inside the science context (e.g. rate equations, equilibria, kinematics). Cambridge structured format with marks, within both syllabuses. Then after '=== MARK SCHEME ===' give a full mark scheme.`;
+try{if(!sample){try{sample=await claude.use("sample")}catch(_){}}const r=await ask(p,{modelTier:"default",onText:({text})=>{o.innerHTML='<div class="msg ai">'+md(text)+'</div>'}});const[q,m]=r.text.split("=== MARK SCHEME ===");
+o.innerHTML=`<div class="msg ai">${md(q)}</div>${m?`<button class="b" onclick="this.nextElementSibling.hidden=false;this.hidden=true">Reveal mark scheme</button><div class="msg ai" hidden>${md(m)}</div>`:""}`}catch(e){o.textContent="Failed: "+(e.code||"")+" "+(e.message||e)+(e.text?"\n\nPartial:\n"+e.text:"")}}
+/* drills */
+let cur=null;
+function key(s,c){return s+"|"+c}
+function drill(){$("#v").innerHTML=`<div class="card"><div class="row"><select id="s" onchange="fillCh('#s','#c');info()">${so()}</select><select id="c" onchange="info()">${chs("Chemistry")}</select></div><div id="inf" class="dim"></div><div class="row" style="margin-top:10px"><button class="b" onclick="start()">Start drill</button><button class="b" onclick="fill()">Generate 10 more (needs internet)</button></div></div><div id="qa"></div>`;info()}
+function info(){const k=key($("#s").value,$("#c").value),n=(D.bank[k]||[]).length,s=D.stat[k]||{a:0,c:0};$("#inf").textContent=`${n}/50 questions saved · accuracy ${s.a?Math.round(100*s.c/s.a):0}% (${s.c}/${s.a}). Saved questions work offline.`}
+async function fill(){const s=$("#s").value,c=$("#c").value,k=key(s,c);$("#inf").textContent="Generating…";
+try{const r=await ask(`Create 10 rapid Cambridge A-Level ${s} paper-1 style multiple-choice questions on "${c}", 4 options (A–D), varied difficulty. Reply with ONLY a JSON array: [{"q":"...","o":["...","...","...","..."],"a":0,"e":"short explanation"}] where a is the index of the correct option.`,{modelTier:"complex"});
+const arr=JSON.parse(r.text.replace(/```json|```/g,"").trim());D.bank[k]=(D.bank[k]||[]).concat(arr);save()}catch(e){alert("Could not generate: "+e.message)}info()}
+function start(){const s=$("#s").value,c=$("#c").value,k=key(s,c),b=D.bank[k]||[];if(!b.length){$("#qa").innerHTML='<div class="card dim">No questions saved yet. Tap “Generate 10 more” while online.</div>';return}
+const w=D.stat[k]&&D.stat[k].wrong||[];const pool=b.map((q,i)=>i).sort((x,y)=>(w.includes(y)-w.includes(x))||Math.random()-.5);cur={k,pool,i:0};show()}
+function show(){const q=D.bank[cur.k][cur.pool[cur.i%cur.pool.length]];$("#qa").innerHTML=`<div class="card"><div class="dim">Question ${cur.i+1}</div><p>${md(q.q)}</p>${q.o.map((o,j)=>`<button class="b opt" onclick="pick(${j},this)">${"ABCD"[j]}. ${md(o)}</button>`).join("")}<div id="ex"></div></div>`}
+function pick(j,el){const id=cur.pool[cur.i%cur.pool.length],q=D.bank[cur.k][id],s=D.stat[cur.k]=D.stat[cur.k]||{a:0,c:0,wrong:[]};s.wrong=s.wrong||[];s.a++;
+document.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i==q.a)b.classList.add("r")});
+if(j==q.a){s.c++;s.wrong=s.wrong.filter(x=>x!=id)}else{el.classList.add("w");if(!s.wrong.includes(id))s.wrong.push(id)}save();
+$("#ex").innerHTML=`<p class="dim">${md(q.e||"")}</p><button class="b" onclick="cur.i++;show()">Next</button>`}
+/* vault */
+D.vault=D.vault||{papers:{}};
+const SC={9701:'Chemistry',9702:'Physics',9709:'Maths'},PJ='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+function ld(u){return new Promise((r,j)=>{const s=document.createElement('script');s.src=u;s.onload=r;s.onerror=j;document.head.appendChild(s)})}
+let pdfL=null;
+async function pdfLib(){if(pdfL)return pdfL;await ld(PJ+'pdf.min.js');await ld(PJ+'pdf.worker.min.js');return pdfL=window.pdfjsLib}
+async function txt(f){const L=await pdfLib(),d=await L.getDocument({data:await f.arrayBuffer()}).promise;let t='';for(let i=1;i<=d.numPages;i++){const c=await (await d.getPage(i)).getTextContent();t+='\n[p'+i+'] '+c.items.map(x=>x.str).join(' ')}return t}
+function vs(s){const P=Object.values(D.vault.papers).filter(p=>p.s==s);if(!P.length)return 'none';const m={};P.forEach(p=>p.qs.forEach(q=>{if(!q.ch)return;const e=m[q.ch]=m[q.ch]||{n:0,mk:0,y:{}};e.n++;e.mk+=q.m||1;e.y[p.y]=(e.y[p.y]||0)+1}));return P.length+' papers ('+[...new Set(P.map(p=>p.y))].sort().join(',')+'). '+Object.entries(m).map(([c,e])=>c+': '+e.n+' qs, '+e.mk+' marks, by year '+JSON.stringify(e.y)).join('; ')}
+function vault(){$('#v').innerHTML=`<div class='card'><b style='color:var(--ac)'>Paper Vault</b><p class='dim'>Select Cambridge past-paper PDFs: question papers and mark schemes together, with their original file names (e.g. 9701_w23_qp_42.pdf). Text is read on your device, then each question is tagged by chapter and saved. Practical papers (3 and 5) are skipped. Start with 5 to 10 papers.</p><input type='file' id='fl' multiple accept='.pdf'><div class='row' style='margin-top:10px'><button class='b' onclick='vp()'>Process papers</button></div><div id='vlog' class='dim' style='white-space:pre-wrap'></div></div><div class='card' id='vst'></div><div class='card'><div class='row'><select id='s' onchange="fillCh('#s','#c')">${so()}</select><select id='c'>${chs('Chemistry')}</select><button class='b' onclick='vb()'>Browse chapter</button></div><div id='vbr'></div></div>`;vstat()}
+function vstat(){const P=Object.values(D.vault.papers);$('#vst').innerHTML=Object.keys(SUBJ).map(s=>{const a=P.filter(p=>p.s==s);return `<div>${s}: ${a.length} papers, ${a.reduce((n,p)=>n+p.qs.length,0)} questions saved</div>`}).join('')}
+async function vp(){const L=$('#vlog'),G={},lines=[];const lg=m=>{lines.push(m);L.textContent=lines.slice(-8).join('\n')};
+[...$('#fl').files].forEach(f=>{const m=f.name.match(/(\d{4})_([smw])(\d{2})_(qp|ms)_(\d)(\d)?/i);if(!m)return;const id=m[1]+'_'+m[2]+m[3]+'_'+m[5]+(m[6]||'');(G[id]=G[id]||{c:m[1],y:2000+ +m[3],se:m[2],p:+m[5]})[m[4].toLowerCase()]=f});
+const ids=Object.keys(G).filter(i=>G[i].qp&&SC[G[i].c]&&![3,5].includes(G[i].p)&&!D.vault.papers[i]);
+if(!ids.length){lg('Nothing new to process. Check the file names and that question papers are included.');return}
+let n=0;for(const id of ids){const g=G[id],s=SC[g.c],mcq=g.p==1&&g.c!='9709';lg(`(${++n}/${ids.length}) reading ${id}`);
+if(mcq&&!g.ms){lg('Skipped '+id+': MCQ needs its mark scheme');continue}
+try{const qt=(await txt(g.qp)).slice(0,30000),mt=g.ms?(await txt(g.ms)).slice(0,15000):'',list=JSON.stringify(SUBJ[s]);
+const p=(mcq?`Extract every multiple-choice question from this Cambridge ${s} paper using the mark scheme key. Skip questions that depend on a diagram, graph or table. Return ONLY a JSON array: [{"ch":"chapter","q":"question","o":["A text","B text","C text","D text"],"a":0,"e":"explanation under 15 words"}] where a is the index of the correct option.`:`Extract one entry per numbered question from this Cambridge ${s} paper. Return ONLY a JSON array: [{"n":"1","ch":"chapter","m":total marks as a number,"st":"style, e.g. calculation, explain, data analysis, mechanism, graph","cmd":"main command word","q":"condensed question under 250 characters","ms":"key mark scheme points under 250 characters, or empty"}].`)+` ch must be exactly one of: ${list}.\n\nPAPER:\n${qt}\n\nMARK SCHEME:\n${mt}`;
+const r=await ask(p,{modelTier:'default'}),qs=JSON.parse(r.text.replace(/```json|```/g,'').trim());
+qs.forEach(q=>{if(!SUBJ[s].includes(q.ch))q.ch=''});
+if(mcq){for(const q of qs){if(q.ch&&Array.isArray(q.o)&&q.o.length==4&&Number.isInteger(q.a)){const k=key(s,q.ch);(D.bank[k]=D.bank[k]||[]).push({q:q.q,o:q.o,a:q.a,e:q.e||'',src:id})}}}
+D.vault.papers[id]={s,y:g.y,se:g.se,p:g.p,mcq,qs};
+try{localStorage.setItem('mrl',JSON.stringify(D))}catch(e){delete D.vault.papers[id];lg('Storage full: stopped. Delete data or process fewer papers.');break}
+lg('Saved '+id+': '+qs.length+' questions')}catch(e){lg('Failed '+id+': '+(e.code||'')+' '+(e.message||e));if(e.code=='rate_limited'){lg('Rate limit reached. Run Process again later: finished papers are kept.');break}}}
+vstat()}
+function vb(){const s=$('#s').value,c=$('#c').value,o=[];for(const [id,p] of Object.entries(D.vault.papers))if(p.s==s)p.qs.forEach((q,i)=>{if(q.ch==c)o.push([id,i,p,q])});
+$('#vbr').innerHTML=o.length?o.map(([id,i,p,q])=>`<div class='msg ai' style='margin-top:8px'><b>${p.y} ${p.se.toUpperCase()} P${p.p} ${q.n||''}</b> <span class='dim'>${q.m?q.m+' marks · ':''}${md(q.st||q.cmd||'')}</span>\n${md(String(q.q).slice(0,300))}${q.ms?'\n\nMark scheme: '+md(q.ms):''}\n<select data-id='${id}' data-i='${i}' onchange='mv(this.dataset.id,+this.dataset.i,this.value)'>${SUBJ[s].map(x=>`<option ${x==c?'selected':''}>${x}</option>`).join('')}</select></div>`).join(''):'<p class="dim">No saved questions for this chapter yet.</p>'}
+function mv(id,i,c){const p=D.vault.papers[id],q=p.qs[i],old=q.ch;q.ch=c;if(p.mcq){const bo=D.bank[key(p.s,old)]||[],j=bo.findIndex(b=>b.src==id&&b.q==q.q);if(j>-1){const [b]=bo.splice(j,1);(D.bank[key(p.s,c)]=D.bank[key(p.s,c)]||[]).push(b)}}save();vb()}
+/* trends */
+function trends(){$("#v").innerHTML=`<div class="card"><div class="row"><select id="s">${so()}</select><button class="b" onclick="tr()">Analyse trends</button></div><textarea id="pp" rows="5" placeholder="Optional but powerful: paste past-paper questions or topic lists by year (e.g. 2023 Nov P4: Q1 kinetics, Q2 transition elements…). More data means better estimates."></textarea><p class="dim">These are informed estimates, not guarantees. Cambridge does not publish what will appear.</p></div><div id="tout"></div>`}
+async function tr(){const s=$("#s").value,o=$("#tout"),pp=$("#pp").value.trim();o.innerHTML='<div class="card dim">Analysing patterns…</div>';
+const me=SUBJ[s].map(c=>{const t=D.stat[key(s,c)];return t&&t.a?c+": "+Math.round(100*t.c/t.a)+"% of "+t.a:null}).filter(Boolean).join("; ")||"no data yet";
+try{const r=await ask(`Analyse Cambridge International AS & A Level ${s} (${CODE[s]}) exam trends. Chapters: ${JSON.stringify(SUBJ[s])}. ${pp?"Past-paper data supplied by the student (weigh this most): "+pp:"No past-paper data supplied: rely on your knowledge of past papers and examiner reports, and say so."} Student accuracy so far: ${me}. Real counts from the student's own past-paper vault (treat as primary evidence, count-based): ${vs(s)}. Reply with ONLY JSON: {"chapters":[{"c":"exact chapter name","l":"High|Medium|Low","why":"one short sentence on frequency and typical question type"}],"styles":["recurring question styles or command words"],"plan":"a focused revision plan weighting likely chapters against the student's weak ones"}. Include every chapter. Be honest about uncertainty.`,{modelTier:"default"});
+const j=JSON.parse(r.text.replace(/```json|```/g,"").trim()),rk={High:0,Medium:1,Low:2},col={High:"var(--no)",Medium:"#ffd24d",Low:"var(--dim)"};
+o.innerHTML=`<div class="card"><b style="color:var(--ac)">Likelihood ranking</b>${j.chapters.sort((a,b)=>rk[a.l]-rk[b.l]).map(x=>`<div style="margin-top:8px"><b style="color:${col[x.l]}">${x.l}</b> · ${md(x.c)}<div class="dim">${md(x.why)}</div></div>`).join("")}</div><div class="card"><b style="color:var(--ac)">Question styles</b><div class="msg ai" style="margin-top:8px">${j.styles.map(md).join("\n• ").replace(/^/,"• ")}</div></div><div class="card"><b style="color:var(--ac)">Your revision plan</b><div class="msg ai" style="margin-top:8px">${md(j.plan)}</div></div>`}catch(e){o.innerHTML='<div class="card">Analysis failed: '+md(e.message||String(e))+'. Try again.</div>'}}
+/* syllabus with objectives */
+const CODE={Chemistry:"9701",Physics:"9702",Maths:"9709"};
+function syl2(){D.obj=D.obj||{};$("#v").innerHTML='<div class="card dim">Tap any chapter to open its learning objectives. They are fetched once, then saved for offline use. Always check against the official Cambridge syllabus PDF for the exact wording.</div>'+Object.entries(SUBJ).map(([s,l])=>`<div class="card"><b style="color:var(--ac)">${s} ${CODE[s]} · ${l.length} chapters</b>${l.map((c,i)=>{const t=D.stat[key(s,c)]||{a:0,c:0},p=t.a?Math.round(100*t.c/t.a):0;return`<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;cursor:pointer;gap:8px" onclick="tg('${s}',${i})"><span>▸ ${c}</span><span class="dim">${t.a?p+'%':'new'}</span></div><div class="bar"><i style="width:${p}%"></i></div><div id="o${s}${i}" class="msg ai" hidden style="margin:8px 0 0"></div></div>`}).join("")}</div>`).join("")}
+async function tg(s,i){const el=document.getElementById("o"+s+i);if(!el.hidden){el.hidden=true;return}el.hidden=false;const c=SUBJ[s][i],k="obj|"+s+"|"+c;if(D.obj[k]){el.textContent=D.obj[k];return}el.textContent="Retrieving learning objectives…";
+try{const r=await ask(`List the learning outcomes for Cambridge International AS & A Level ${s} (${CODE[s]}), topic "${c}" (current syllabus). Organise by sub-topic number (e.g. 1.1, 1.2) with numbered outcomes under each, following the official syllabus structure and wording as closely as you can. Mark any point you are not certain of with (verify). Plain text only: no markdown symbols, no preamble, no closing remarks.`,{modelTier:"default",onText:({text})=>{el.textContent=text}});D.obj[k]=r.text;save();el.textContent=r.text}catch(e){el.textContent="Could not load: "+(e.message||e)}}
+/* syllabus */
+function syl(){$("#v").innerHTML=Object.entries(SUBJ).map(([s,l])=>`<div class="card"><b style="color:var(--ac)">${s}</b>${l.map(c=>{const t=D.stat[key(s,c)]||{a:0,c:0},p=t.a?Math.round(100*t.c/t.a):0;return`<div style="margin-top:10px"><div style="display:flex;justify-content:space-between"><span>${c}</span><span class="dim">${t.a?p+"% · "+t.a+" attempts":"not started"}</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`}).join("")}</div>`).join("")}
+$("#st").textContent=localStorage.getItem("mrl_gemini_key")?"// Gemini key saved":"// AI key not set";
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
+}
+nav();chat();
+</script></body></html>
