@@ -72,7 +72,7 @@ async function standaloneGroq(input, options={}) {
   // Groq's free-tier TPM limit is a rolling window. If a request arrives a little too soon,
   // wait for the server-specified interval and retry instead of failing the whole paper.
   let response, data;
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
     response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method:"POST",
       headers:{"Content-Type":"application/json", "Authorization":"Bearer "+apiKey},
@@ -81,10 +81,10 @@ async function standaloneGroq(input, options={}) {
     data = await response.json().catch(()=>({}));
     const message = data?.error?.message || "";
     const isTpm = response.status === 429 && /tokens per minute|rate limit reached/i.test(message);
-    if (response.ok || !isTpm || attempt === 5) break;
+    if (response.ok || !isTpm || attempt === 14) break;
     const match = message.match(/try again in ([0-9.]+)s/i);
-    const waitMs = match ? Math.ceil(Number(match[1]) * 1000) + 400 : Math.min(15000, 2000 * (attempt + 1));
-    if (typeof options.onText === "function") options.onText({text:"Groq rate limit reached; waiting "+(waitMs/1000).toFixed(1)+" seconds and retrying…"});
+    const waitMs = match ? Math.ceil(Number(match[1]) * 1000) + 2500 : Math.min(65000, 15000 * (attempt + 1));
+    if (typeof options.onText === "function") options.onText({text:"Groq rate limit reached (attempt "+(attempt+1)+"/15). Waiting "+(waitMs/1000).toFixed(1)+" seconds, then retrying the same request automatically…"});
     await new Promise(resolve => setTimeout(resolve, waitMs));
   }
   if (!response.ok) throw new Error(data?.error?.message || ("Groq request failed ("+response.status+")."));
@@ -206,7 +206,7 @@ async function pdfLib(){if(pdfL)return pdfL;await ld(PJ+'pdf.min.js');await ld(P
 async function txtPages(f){const L=await pdfLib(),d=await L.getDocument({data:await f.arrayBuffer()}).promise,a=[];for(let i=1;i<=d.numPages;i++){const c=await (await d.getPage(i)).getTextContent();a.push('[p'+i+'] '+c.items.map(x=>x.str).join(' '))}return a}
 async function txt(f){return (await txtPages(f)).join('\n')}
 function vs(s){const P=Object.values(D.vault.papers).filter(p=>p.s==s);if(!P.length)return 'none';const m={};P.forEach(p=>p.qs.forEach(q=>{if(!q.ch)return;const e=m[q.ch]=m[q.ch]||{n:0,mk:0,y:{}};e.n++;e.mk+=q.m||1;e.y[p.y]=(e.y[p.y]||0)+1}));return P.length+' papers ('+[...new Set(P.map(p=>p.y))].sort().join(',')+'). '+Object.entries(m).map(([c,e])=>c+': '+e.n+' qs, '+e.mk+' marks, by year '+JSON.stringify(e.y)).join('; ')}
-function vault(){$('#v').innerHTML=`<div class='card'><b style='color:var(--ac)'>Paper Vault</b><p class='dim'>Select Cambridge past-paper PDFs: question papers and mark schemes together, with their original file names (e.g. 9701_w23_qp_42.pdf). Text is read on your device, then each question is tagged by chapter and saved. Practical papers (3 and 5) are skipped. Start with 5 to 10 papers.</p><input type='file' id='fl' multiple accept='.pdf'><div class='row' style='margin-top:10px'><button class='b' onclick='vp()'>Process papers</button></div><div id='vlog' class='dim' style='white-space:pre-wrap'></div></div><div class='card' id='vst'></div><div class='card'><div class='row'><select id='s' onchange="fillCh('#s','#c')">${so()}</select><select id='c'>${chs('Chemistry')}</select><button class='b' onclick='vb()'>Browse chapter</button></div><div id='vbr'></div></div>`;vstat()}
+function vault(){$('#v').innerHTML=`<div class='card'><b style='color:var(--ac)'>Paper Vault</b><p class='dim'>Select Cambridge past-paper PDFs: question papers and mark schemes together, with their original file names (e.g. 9701_w23_qp_42.pdf). Text is read on your device, then each question is tagged by chapter and saved. Practical papers (3 and 5) are skipped. Start with one paper first. Groq's free tier has a shared rolling tokens-per-minute limit, so Mr L spaces out small requests while processing.</p><input type='file' id='fl' multiple accept='.pdf'><div class='row' style='margin-top:10px'><button class='b' onclick='vp()'>Process papers</button></div><div id='vlog' class='dim' style='white-space:pre-wrap'></div></div><div class='card' id='vst'></div><div class='card'><div class='row'><select id='s' onchange="fillCh('#s','#c')">${so()}</select><select id='c'>${chs('Chemistry')}</select><button class='b' onclick='vb()'>Browse chapter</button></div><div id='vbr'></div></div>`;vstat()}
 function vstat(){const P=Object.values(D.vault.papers);$('#vst').innerHTML=Object.keys(SUBJ).map(s=>{const a=P.filter(p=>p.s==s);return `<div>${s}: ${a.length} papers, ${a.reduce((n,p)=>n+p.qs.length,0)} questions saved</div>`}).join('')}
 async function vp(){const L=$('#vlog'),G={},lines=[];const lg=m=>{lines.push(m);L.textContent=lines.slice(-8).join('\n')};
 [...$('#fl').files].forEach(f=>{const m=f.name.match(/(\d{4})_([smw])(\d{2})_(qp|ms)_(\d)(\d)?/i);if(!m)return;const id=m[1]+'_'+m[2]+m[3]+'_'+m[5]+(m[6]||'');(G[id]=G[id]||{c:m[1],y:2000+ +m[3],se:m[2],p:+m[5]})[m[4].toLowerCase()]=f});
@@ -216,34 +216,36 @@ let n=0;for(const id of ids){const g=G[id],s=SC[g.c],mcq=g.p==1&&g.c!='9709';lg(
 if(mcq&&!g.ms){lg('Skipped '+id+': MCQ needs its mark scheme');continue}
 try{
 const qpages=await txtPages(g.qp),msPages=g.ms?await txtPages(g.ms):[],list=JSON.stringify(SUBJ[s]);
-// Keep each request well below Groq's 8,000-token request budget: one paper page, one related mark-scheme page, and a smaller output allowance.
+// Use conservative small requests to stay under Groq's shared 8,000-token-per-minute limit: small paper sections, a tiny related mark-scheme excerpt, and a short output allowance.
 const chunks=[];
 for(let i=0;i<qpages.length;i++){
   const raw=qpages[i];
-  for(let off=0;off<raw.length;off+=2000)chunks.push({text:raw.slice(off,off+2000),from:i+1,to:i+1,part:Math.floor(off/2000)+1});
+  for(let off=0;off<raw.length;off+=600)chunks.push({text:raw.slice(off,off+600),from:i+1,to:i+1,part:Math.floor(off/600)+1});
 }
 const all=[];
 for(let ci=0;ci<chunks.length;ci++){
  const ch=chunks[ci];
  // Match mark-scheme pages proportionally to question-paper sections, instead of attaching the entire mark scheme every time.
  const msIndex=msPages.length?Math.min(msPages.length-1,Math.floor(ci*msPages.length/chunks.length)):-1;
- const mt=msIndex>=0?String(msPages[msIndex]).slice(0,900):'';
+ const mt=msIndex>=0?String(msPages[msIndex]).slice(0,200):'';
  lg(`Processing ${id}: page ${ch.from}${ch.part>1?' (section '+ch.part+')':''} (${ci+1}/${chunks.length})`);
- const p=(mcq?`Extract every multiple-choice question visible in this section of the Cambridge ${s} paper using the supplied mark-scheme excerpt if relevant. Skip questions that depend on a diagram, graph or table. Return ONLY a JSON array: [{"ch":"chapter","q":"question","o":["A text","B text","C text","D text"],"a":0,"e":"explanation under 15 words"}] where a is the index of the correct option.`:`Extract one entry per numbered question visible in this section of the Cambridge ${s} paper. Return ONLY a JSON array: [{"n":"1","ch":"chapter","m":total marks as a number,"st":"style, e.g. calculation, explain, data analysis, mechanism, graph","cmd":"main command word","q":"condensed question under 250 characters","ms":"key mark scheme points under 250 characters, or empty"}].`)+` ch must be exactly one of: ${list}. Only extract questions supported by this section; do not invent missing text. If the mark-scheme excerpt does not contain the answer, leave the answer/explanation blank or use only what is clearly supported.
+ const p=(mcq?`Extract any multiple-choice question fully visible in this short section of the Cambridge ${s} paper. Skip questions that depend on a diagram, graph or table. Return ONLY a JSON array: [{"ch":"chapter","q":"very concise question","o":["A","B","C","D"],"a":0,"e":"brief explanation"}] where a is the correct option index. If no complete question is visible, return [].`:`Extract any numbered question or sub-question clearly visible in this short section of the Cambridge ${s} paper. Return ONLY a JSON array: [{"n":"1(a)","ch":"chapter","m":1,"st":"calculation/explain/data analysis/mechanism/graph","cmd":"command word","q":"very concise question","ms":"brief supported mark point or empty"}]. If no complete question is visible, return [].`)+` ch must be exactly one of: ${list}. Only extract questions supported by this section; do not invent missing text. If the mark-scheme excerpt does not contain the answer, leave the answer/explanation blank or use only what is clearly supported.
 
 PAPER SECTION (page ${ch.from}):
 ${ch.text}
 
 RELATED MARK-SCHEME EXCERPT (page ${msIndex+1}, may not contain every answer):
 ${mt}`;
- const r=await ask(p,{modelTier:'default',max_completion_tokens:700}),qs=JSON.parse(r.text.replace(/```json|```/g,'').trim());
+ const r=await ask(p,{modelTier:'default',max_completion_tokens:180,onText:({text})=>lg(text)}),qs=JSON.parse(r.text.replace(/```json|```/g,'').trim());
+ // Space requests so their token usage does not stack up inside Groq's rolling one-minute TPM window.
+ if(ci<chunks.length-1){lg('Request succeeded. Waiting 65 seconds before the next request to let the rolling one-minute token window clear…');await new Promise(resolve=>setTimeout(resolve,65000));}
  qs.forEach(q=>{if(!SUBJ[s].includes(q.ch))q.ch=''});all.push(...qs);
 }
 if(mcq){for(const q of all){if(q.ch&&Array.isArray(q.o)&&q.o.length==4&&Number.isInteger(q.a)){const k=key(s,q.ch);(D.bank[k]=D.bank[k]||[]).push({q:q.q,o:q.o,a:q.a,e:q.e||'',src:id})}}}
 D.vault.papers[id]={s,y:g.y,se:g.se,p:g.p,mcq,qs:all};
 try{localStorage.setItem('mrl',JSON.stringify(D))}catch(e){delete D.vault.papers[id];lg('Storage full: stopped. Process fewer papers.');break}
 lg('Saved '+id+': '+all.length+' questions')
-}catch(e){lg('Failed '+id+': '+(e.code||'')+' '+(e.message||e));if(e.code=='rate_limited'){lg('Rate limit reached. Run Process again later: finished papers are kept.');break}}
+}catch(e){lg('Failed '+id+': '+(e.code||'')+' '+(e.message||e));if(/rate limit|tokens per minute|try again in/i.test(e.message||String(e))){lg('Groq still refused this request after 15 automatic retries. Wait a few minutes, then click Process papers once; completed papers remain saved.');break}}
 }
 vstat()}
 function vb(){const s=$('#s').value,c=$('#c').value,o=[];for(const [id,p] of Object.entries(D.vault.papers))if(p.s==s)p.qs.forEach((q,i)=>{if(q.ch==c)o.push([id,i,p,q])});
