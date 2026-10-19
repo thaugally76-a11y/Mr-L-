@@ -94,6 +94,32 @@ async function standaloneGroq(input, options={}) {
   return {text};
 }
 async function ask(p,o={}){if(!sample)throw new Error("AI link unavailable.");return sample(p,{cache:false,...o})}
+// Parse AI-produced JSON defensively and retry malformed/truncated answers automatically.
+function parseJsonArray(raw){
+  const cleaned=String(raw||'').replace(/```(?:json)?/gi,'').trim();
+  try { const v=JSON.parse(cleaned); if(Array.isArray(v)) return v; if(v&&Array.isArray(v.questions)) return v.questions; } catch(_) {}
+  const start=cleaned.indexOf('['), end=cleaned.lastIndexOf(']');
+  if(start>=0&&end>start){const v=JSON.parse(cleaned.slice(start,end+1));if(Array.isArray(v))return v;}
+  throw new Error('AI response was not a complete JSON array.');
+}
+async function askJsonArray(prompt,log){
+  let lastError;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const revised=attempt===0?prompt:prompt+'\n\nIMPORTANT: Your previous response was invalid JSON. Return a COMPLETE, valid JSON array only. Escape quotation marks inside strings, do not include literal line breaks inside JSON strings, keep each question and explanation very short, and return [] if uncertain. Do not use Markdown fences.';
+      const r=await ask(revised,{modelTier:'default',max_completion_tokens:240,onText:({text})=>{if(/rate limit reached/i.test(text))log(text);}});
+      return parseJsonArray(r.text);
+    }catch(e){
+      lastError=e;
+      if(attempt<2){
+        log('AI returned malformed JSON. Automatically retrying this section ('+(attempt+2)+'/3)…');
+        // Allow the rolling token window to clear before spending tokens on a retry.
+        await new Promise(resolve=>setTimeout(resolve,65000));
+      }
+    }
+  }
+  throw new Error('AI returned invalid JSON after 3 attempts. '+(lastError?.message||''));
+}
 function settings(){
   const existing=localStorage.getItem("mrl_groq_key")||"";
   $("#v").innerHTML=`<div class="card">
@@ -152,9 +178,9 @@ for(const p of P){let x=p[0]*cY+p[2]*sY,z=-p[0]*sY+p[2]*cY,y=p[1]*cr-z*sr;z=p[1]
 gx.fillStyle="rgba(0,255,106,"+(.12+.7*d)+")";gx.beginPath();gx.arc(cx0+x*R,cy0+y*R,.8+1.6*d,0,7);gx.fill()}
 gx.strokeStyle="rgba(0,255,106,.25)";gx.lineWidth=1;gx.beginPath();gx.arc(cx0,cy0,R,0,7);gx.stroke();requestAnimationFrame(gd)}gd();
 /* nav */
-const T={chat:"Mr L",elite:"Elite",cross:"Crossover",drill:"Drills",vault:"Vault",trends:"Trends",syl:"Syllabus",settings:"Settings"};let tab="chat";
+const T={chat:"Mr L",elite:"Elite",cross:"Crossover",drill:"Drills",papers:"Exam Papers",vault:"Question Vault",trends:"Trends",syl:"Syllabus",settings:"Settings"};let tab="chat";
 function nav(){$("#nav").innerHTML=Object.entries(T).map(([k,v])=>`<button class="${k==tab?"on":""}" onclick="go('${k}')">${v}</button>`).join("")}
-function go(t){tab=t;nav();({chat,elite,cross,drill,vault,trends,syl:syl2,settings})[t]()}
+function go(t){tab=t;nav();({chat,elite,cross,drill,papers:examPapers,vault,trends,syl:syl2,settings})[t]()}
 const so=()=>Object.keys(SUBJ).map(s=>`<option>${s}</option>`).join("");
 const chs=s=>SUBJ[s].map(c=>`<option>${c}</option>`).join("");
 function fillCh(sel,ch){$(ch).innerHTML=chs($(sel).value)}
@@ -197,6 +223,87 @@ function pick(j,el){const id=cur.pool[cur.i%cur.pool.length],q=D.bank[cur.k][id]
 document.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i==q.a)b.classList.add("r")});
 if(j==q.a){s.c++;s.wrong=s.wrong.filter(x=>x!=id)}else{el.classList.add("w");if(!s.wrong.includes(id))s.wrong.push(id)}save();
 $("#ex").innerHTML=`<p class="dim">${md(q.e||"")}</p><button class="b" onclick="cur.i++;show()">Next</button>`;typesetMath($("#ex"))}
+/* Exam Papers: local-first PDF library (no AI calls during upload). */
+const EP_DB='mrl-exam-library-v1', EP_STORE='files';
+let epDbPromise=null, epFilesCache=[];
+function epOpenDb(){
+ if(epDbPromise)return epDbPromise;
+ epDbPromise=new Promise((resolve,reject)=>{
+  if(!('indexedDB' in window)){reject(new Error('This browser does not support IndexedDB.'));return;}
+  const req=indexedDB.open(EP_DB,1);
+  req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(EP_STORE))db.createObjectStore(EP_STORE,{keyPath:'id'});};
+  req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open local paper storage.'));
+ });
+ return epDbPromise;
+}
+async function epPut(record){const db=await epOpenDb();return new Promise((resolve,reject)=>{const tx=db.transaction(EP_STORE,'readwrite');tx.objectStore(EP_STORE).put(record);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('Could not save file.'));tx.onabort=()=>reject(tx.error||new Error('Save cancelled.'));});}
+async function epGetAll(){const db=await epOpenDb();return new Promise((resolve,reject)=>{const tx=db.transaction(EP_STORE,'readonly'),r=tx.objectStore(EP_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error||new Error('Could not read local library.'));});}
+async function epGet(id){const db=await epOpenDb();return new Promise((resolve,reject)=>{const r=db.transaction(EP_STORE,'readonly').objectStore(EP_STORE).get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error||new Error('Could not read file.'));});}
+async function epDelete(id){const db=await epOpenDb();return new Promise((resolve,reject)=>{const tx=db.transaction(EP_STORE,'readwrite');tx.objectStore(EP_STORE).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('Could not delete file.'));});}
+function epEscape(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function epId(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():'ep-'+Date.now()+'-'+Math.random().toString(36).slice(2);}
+function epMetaFromName(name){
+ const n=String(name||'');
+ const m=n.match(/(9701|9702|9709)[_-]([smw])([0-9]{2})[_-](qp|ms)[_-]?([0-9]{1,2})/i);
+ let kind=/\bms\b|mark.?scheme/i.test(n)?'ms':'qp',code='',session='unknown',year='',component='',variant='';
+ if(m){code=m[1];session=m[2].toLowerCase();year=String(2000+Number(m[3]));kind=m[4].toLowerCase();component=m[5];variant=component.length>1?component.slice(1):'';}
+ const subject=code==='9701'?'Chemistry':code==='9702'?'Physics':code==='9709'?'Maths':'';
+ return {subject,code,session,year,component,variant,kind};
+}
+function epPairKey(r){return [r.code||r.subject||'unknown',r.session||'unknown',r.year||'unknown',r.component||'unknown'].join('|');}
+function epBytes(n){if(!Number.isFinite(n))return '';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return n.toFixed(i?1:0)+' '+u[i];}
+function epSessionName(s){return ({s:'May/June',m:'February/March',w:'October/November',unknown:'Unspecified'})[s]||s||'Unspecified';}
+function epSubjectOptions(value,all=false){return (all?['All subjects','Chemistry','Physics','Maths']:['','Chemistry','Physics','Maths']).map(x=>`<option value="${epEscape(x==='All subjects'?'all':x)}" ${x===(all?(value||'all'):(value||''))?'selected':''}>${x||'Choose subject'}</option>`).join('');}
+function epTypeOptions(value){return [['qp','Question paper'],['ms','Mark scheme'],['other','Other PDF']].map(([v,l])=>`<option value="${v}" ${v===value?'selected':''}>${l}</option>`).join('');}
+function epSessionOptions(value){return [['s','May/June'],['m','February/March'],['w','October/November'],['unknown','Unspecified']].map(([v,l])=>`<option value="${v}" ${v===value?'selected':''}>${l}</option>`).join('');}
+function examPapers(){
+ $('#v').innerHTML=`<div class="card"><b style="color:var(--ac);font-size:17px">Exam Papers · Local Library</b><p class="dim">Upload your Cambridge question papers and mark schemes in batches. Mr L stores the original PDFs in this browser on this computer; uploading does not call AI or send the PDFs to Groq. Filenames such as <code>9701_s26_qp_12.pdf</code> are recognised automatically where possible. Review the metadata after upload.</p><input type="file" id="epUpload" multiple accept="application/pdf,.pdf"><div class="row" style="margin-top:10px"><button class="b" onclick="epUploadFiles()">Add PDFs to library</button><button class="b" onclick="epRefresh()">Refresh library</button></div><div id="epStatus" class="dim" role="status">Ready. Choose question papers and matching mark schemes.</div></div>
+ <div class="card"><b>Browse your collection</b><div class="row" style="margin-top:10px"><select id="epFilterSubject" onchange="epRender()">${epSubjectOptions('all',true)}</select><select id="epFilterComponent" onchange="epRender()"><option value="all">All paper codes</option></select><select id="epFilterYear" onchange="epRender()"><option value="all">All years</option></select><select id="epFilterType" onchange="epRender()"><option value="all">All file types</option><option value="qp">Question papers</option><option value="ms">Mark schemes</option><option value="other">Other PDFs</option></select><input id="epSearch" placeholder="Search filename, year, paper code…" oninput="epRender()" style="flex:1;min-width:180px"></div><div id="epStats" class="dim"></div><div id="epList"></div></div>`;
+ epRefresh();
+}
+async function epRefresh(){try{epFilesCache=await epGetAll();epUpdateFilters();epRender();}catch(e){const s=$('#epStatus');if(s)s.textContent='Local library error: '+(e.message||e);}}
+async function epUploadFiles(){
+ const input=$('#epUpload'),status=$('#epStatus');if(!input||!input.files.length){status.textContent='Choose one or more PDF files first.';return;}
+ const files=Array.from(input.files);let saved=0,failed=0;status.textContent='Saving PDFs locally…';
+ for(let i=0;i<files.length;i++){
+  const f=files[i];if(!/\.pdf$/i.test(f.name)){failed++;continue;}
+  try{
+   const m=epMetaFromName(f.name);const rec={id:epId(),name:f.name,size:f.size,mime:f.type||'application/pdf',addedAt:new Date().toISOString(),subject:m.subject,code:m.code,session:m.session,year:m.year,component:m.component,variant:m.variant,kind:m.kind,pairKey:'',blob:f};
+   rec.pairKey=epPairKey(rec);await epPut(rec);saved++;
+   status.textContent=`Saving PDFs locally… ${i+1}/${files.length}`;
+  }catch(e){failed++;status.textContent='Could not save '+f.name+': '+(e.message||e)+' (browser storage may be full).';break;}
+ }
+ input.value='';await epRefresh();status.textContent=`Finished: ${saved} PDF(s) saved on this device${failed?'; '+failed+' could not be saved':''}. No AI calls were made.`;
+}
+function epUpdateFilters(){
+ const comp=$('#epFilterComponent'),year=$('#epFilterYear');if(!comp||!year)return;
+ const oldComp=comp.value||'all',oldYear=year.value||'all';
+ const comps=[...new Set(epFilesCache.map(f=>f.component).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+ const years=[...new Set(epFilesCache.map(f=>String(f.year||'')).filter(y=>/^\d{4}$/.test(y)))].sort((a,b)=>Number(b)-Number(a));
+ comp.innerHTML='<option value="all">All paper codes</option>'+comps.map(c=>`<option value="${epEscape(c)}">Paper code ${epEscape(c)}</option>`).join('');
+ year.innerHTML='<option value="all">All years</option>'+years.map(y=>`<option value="${epEscape(y)}">${epEscape(y)}</option>`).join('');
+ comp.value=comps.includes(oldComp)?oldComp:'all';year.value=years.includes(oldYear)?oldYear:'all';
+}
+function epRender(){
+ const list=$('#epList');if(!list)return;
+ const fs=epFilesCache.slice();const sub=$('#epFilterSubject')?.value||'all',typ=$('#epFilterType')?.value||'all',component=$('#epFilterComponent')?.value||'all',year=$('#epFilterYear')?.value||'all',query=($('#epSearch')?.value||'').trim().toLowerCase();
+ const all=fs.filter(f=>(sub==='all'||f.subject===sub)&&(typ==='all'||f.kind===typ)&&(component==='all'||f.component===component)&&(year==='all'||String(f.year)===year)&&(!query||[f.name,f.year,f.component,f.subject,f.code,epSessionName(f.session)].join(' ').toLowerCase().includes(query)));
+ const qps=fs.filter(f=>f.kind==='qp'),mss=fs.filter(f=>f.kind==='ms');
+ const paired= qps.filter(q=>mss.some(m=>m.pairKey===q.pairKey)).length;
+ const stats=$('#epStats');if(stats)stats.textContent=`${fs.length} PDF(s) stored · ${qps.length} question paper(s) · ${mss.length} mark scheme(s) · ${paired} question paper(s) have a matching mark scheme. Pairing is based on the current metadata.`;
+ if(!all.length){list.innerHTML='<p class="dim">No matching PDFs yet. Upload your papers above, or change the filters.</p>';return;}
+ list.innerHTML=all.map(f=>{
+  const counterpart=fs.find(x=>x.id!==f.id&&x.pairKey===f.pairKey&&((f.kind==='qp'&&x.kind==='ms')||(f.kind==='ms'&&x.kind==='qp')));
+  const title=f.kind==='qp'?'Question paper':f.kind==='ms'?'Mark scheme':'Other PDF';
+  const subjOpts=epSubjectOptions(f.subject,false);
+  return `<div class="card" style="margin-top:10px;margin-bottom:10px"><div class="row" style="align-items:center;justify-content:space-between"><b>${epEscape(f.name)}</b><span class="dim">${epBytes(f.size)}</span></div><div class="dim">${epEscape(title)} · ${epEscape(f.subject||'Subject not identified')} · ${epEscape(f.year||'Year unknown')} · ${epEscape(epSessionName(f.session))} · Paper code ${epEscape(f.component||'unknown')}${f.variant?' · variant '+epEscape(f.variant):''}</div><p class="dim">${counterpart?'Matched with: '+epEscape(counterpart.name):f.kind==='other'?'This PDF is not currently marked as a question paper or mark scheme.':'No matching '+(f.kind==='qp'?'mark scheme':'question paper')+' found yet.'}</p><details><summary style="cursor:pointer;color:var(--ac);margin:8px 0">Review / correct metadata</summary><div class="row" style="margin-top:10px"><select id="epsub-${f.id}">${subjOpts}</select><select id="epkind-${f.id}">${epTypeOptions(f.kind)}</select><select id="epses-${f.id}">${epSessionOptions(f.session)}</select><input id="epyear-${f.id}" type="number" min="2000" max="2099" placeholder="Year" value="${epEscape(f.year||'')}" style="width:100px"><input id="epcomp-${f.id}" placeholder="Paper code, e.g. 12" value="${epEscape(f.component||'')}" style="width:140px"></div><button class="b" onclick="epSaveMeta('${f.id}')">Save metadata</button></details><div class="row" style="margin-top:10px"><button class="b" onclick="epOpenPdf('${f.id}')">Open PDF</button><button class="b" onclick="epDownload('${f.id}')">Download copy</button><button class="b" onclick="epRemove('${f.id}')">Remove</button></div></div>`;
+ }).join('');
+}
+async function epSaveMeta(id){const f=await epGet(id);if(!f)return;const s=$('#epsub-'+id).value,k=$('#epkind-'+id).value,ss=$('#epses-'+id).value,y=$('#epyear-'+id).value.trim(),c=$('#epcomp-'+id).value.trim();f.subject=s;f.code=s==='Chemistry'?'9701':s==='Physics'?'9702':s==='Maths'?'9709':'';f.kind=k;f.session=ss;f.year=y;f.component=c;f.pairKey=epPairKey(f);await epPut(f);await epRefresh();const st=$('#epStatus');if(st)st.textContent='Metadata saved. Pairing will update automatically.';}
+async function epOpenPdf(id){const win=window.open('about:blank','_blank');try{const f=await epGet(id);if(!f)throw new Error('File not found in local library.');const url=URL.createObjectURL(f.blob);if(win){win.location.href=url;setTimeout(()=>URL.revokeObjectURL(url),120000);}else{epDownload(id);alert('Your browser blocked the new tab, so the PDF download was started instead.');}}catch(e){if(win)win.close();alert('Could not open PDF: '+(e.message||e));}}
+async function epDownload(id){try{const f=await epGet(id);if(!f)throw new Error('File not found.');const url=URL.createObjectURL(f.blob),a=document.createElement('a');a.href=url;a.download=f.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(e){alert('Could not download PDF: '+(e.message||e));}}
+async function epRemove(id){const f=await epGet(id);if(!f)return;if(!confirm('Remove '+f.name+' from this browser’s Mr L library? This does not delete any original file on your computer.'))return;await epDelete(id);await epRefresh();const s=$('#epStatus');if(s)s.textContent='PDF removed from the local Mr L library.';}
+
 /* vault */
 D.vault=D.vault||{papers:{}};
 const SC={9701:'Chemistry',9702:'Physics',9709:'Maths'},PJ='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -236,7 +343,7 @@ ${ch.text}
 
 RELATED MARK-SCHEME EXCERPT (page ${msIndex+1}, may not contain every answer):
 ${mt}`;
- const r=await ask(p,{modelTier:'default',max_completion_tokens:180,onText:({text})=>lg(text)}),qs=JSON.parse(r.text.replace(/```json|```/g,'').trim());
+ const qs=await askJsonArray(p,lg);
  // Space requests so their token usage does not stack up inside Groq's rolling one-minute TPM window.
  if(ci<chunks.length-1){lg('Request succeeded. Waiting 65 seconds before the next request to let the rolling one-minute token window clear…');await new Promise(resolve=>setTimeout(resolve,65000));}
  qs.forEach(q=>{if(!SUBJ[s].includes(q.ch))q.ch=''});all.push(...qs);
