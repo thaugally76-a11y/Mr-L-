@@ -3,6 +3,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#010a04">
 <meta name="description" content="Mr L — Cambridge A-Level Chemistry, Physics and Maths study assistant">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'], ['\\[','\\]']], processEscapes: true },
+  options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] },
+  startup: { typeset: false }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <link rel="manifest" href="manifest.json">
 <style>
 :root{color-scheme:dark;--bg:#010a04;--pn:rgba(2,16,8,.8);--ac:#00ff6a;--tx:#c8ffdc;--dim:#5f9c78;--ok:#2dffa0;--no:#ff4d6d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -32,18 +40,7 @@ nav button,.b,.card,select,input,textarea,.ai{border-color:#0f4a24}
 select,input,textarea{background:#020d06}.me{background:#0a3a1c}.ai{background:#04140a}
 .bar{background:#06200f}.bar i{background:linear-gradient(90deg,#0a8a3a,#7dffb0)}
 #globe{position:fixed;inset:0;z-index:0;pointer-events:none}
-</style>
-<!-- MathJax renders LaTeX such as $$...$$ and \( ... \) as readable equations. -->
-<script>
-window.MathJax = {
-  tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
-  svg: { fontCache: 'global' },
-  startup: { typeset: false }
-};
-</script>
-<script async id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
-
-</head><body>
+</style></head><body>
 <canvas id="rain"></canvas><canvas id="globe"></canvas>
 <div id="app">
 <header><h1>MR L</h1><span class="dim" id="st">// online</span></header>
@@ -61,62 +58,65 @@ let D;try{D=JSON.parse(localStorage.getItem("mrl")||"{}")}catch(e){D={}}
 D.bank=D.bank||{};D.stat=D.stat||{};
 const save=()=>{try{localStorage.setItem("mrl",JSON.stringify(D))}catch(e){}};
 let sample=null,hist=[];
-const SYS="You are Mr L, a witty, loyal, composed AI butler in the style of JARVIS from Iron Man 2, serving a Cambridge A-Level student (Chemistry 9701, Physics 9702, Maths 9709) in Mauritius. Address them as 'sir' or 'ma’am' sparingly. You have PhD-level depth. Be accurate; say so when unsure. All exam-style content must follow Cambridge conventions (command words, marks in brackets, structured parts) and stay within the syllabus. ";
-// Standalone Gemini connection. The user enters their own API key in Settings.
-sample = standaloneGemini;
-async function standaloneGemini(input, options={}) {
-  const apiKey = localStorage.getItem("mrl_gemini_key");
-  if (!apiKey) throw new Error("No Gemini API key saved. Open Settings and add your key.");
-  const contents = (Array.isArray(input) ? input : [{role:"user", content:String(input)}])
-    .map(m => ({role: (m.role === "assistant" || m.role === "model") ? "model" : "user",
-      parts:[{text:String(m.content ?? "")}]}));
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
-    method:"POST", headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-    body:JSON.stringify({contents, generationConfig:{temperature:0.7}})
+const SYS="You are Mr L, a witty, loyal, composed AI butler in the style of JARVIS from Iron Man 2, serving a Cambridge A-Level student (Chemistry 9701, Physics 9702, Maths 9709) in Mauritius. Address them as 'sir' or 'ma’am' sparingly. You have PhD-level depth. Be accurate; say so when unsure. All exam-style content must follow Cambridge conventions (command words, marks in brackets, structured parts) and stay within the syllabus. For all maths and science equations, put expressions inside $...$ for inline maths or $$...$$ for display maths. Put text labels inside maths using \text{...}. Never leave raw LaTeX commands outside maths delimiters. ";
+// Standalone Groq connection. The user enters their own API key in Settings.
+sample = standaloneGroq;
+async function standaloneGroq(input, options={}) {
+  const apiKey = localStorage.getItem("mrl_groq_key");
+  if (!apiKey) throw new Error("No Groq API key saved. Open Settings and add your key.");
+  const messages = [{role:"system", content:SYS}].concat(
+    (Array.isArray(input) ? input : [{role:"user", content:String(input)}])
+      .map(m => ({role: (m.role === "assistant" || m.role === "model") ? "assistant" : "user",
+        content:String(m.content ?? "")}))
+  );
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method:"POST",
+    headers:{"Content-Type":"application/json", "Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model:"openai/gpt-oss-120b", messages, temperature:0.7, max_completion_tokens:4096})
   });
   const data = await response.json().catch(()=>({}));
-  if (!response.ok) throw new Error(data?.error?.message || ("Gemini request failed ("+response.status+")."));
-  const text = (data.candidates?.[0]?.content?.parts || []).map(p=>p.text||"").join("");
-  if (!text) throw new Error("Gemini returned no text. Try again or check your API quota.");
+  if (!response.ok) throw new Error(data?.error?.message || ("Groq request failed ("+response.status+")."));
+  const text = data.choices?.[0]?.message?.content || "";
+  if (!text) throw new Error("Groq returned no text. Check your API key, model access, or rate limits.");
   if (typeof options.onText === "function") options.onText({text});
   return {text};
 }
-async function ask(p,o={}){if(!sample)throw new Error("AI link unavailable.");return sample(SYS+"\\n\\n"+p,{cache:false,...o})}
+async function ask(p,o={}){if(!sample)throw new Error("AI link unavailable.");return sample(p,{cache:false,...o})}
 function settings(){
-  const existing=localStorage.getItem("mrl_gemini_key")||"";
+  const existing=localStorage.getItem("mrl_groq_key")||"";
   $("#v").innerHTML=`<div class="card">
-    <b style="color:var(--ac)">AI connection</b>
-    <p class="dim">Mr L uses Gemini instead of Claude's Artifact runtime. Create a key in Google AI Studio, then paste it below. Your key is stored in this browser on this device; it is not included in the app files.</p>
-    <p><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--ac)">Open Google AI Studio — API keys ↗</a></p>
-    <label for="gemkey">Gemini API key</label>
-    <input id="gemkey" class="w" type="password" autocomplete="off" placeholder="Paste your API key here" value="${existing.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">
-    <div class="row" style="margin-top:10px"><button class="b" onclick="saveGemKey()">Save key</button><button class="b" onclick="testGemKey()">Test connection</button><button class="b" onclick="clearGemKey()">Forget key</button></div>
+    <b style="color:var(--ac)">AI connection — Groq</b>
+    <p class="dim">Mr L uses Groq's hosted GPT-OSS 120B model. Create a Groq API key, then paste it below. Your key is saved in this browser on this device; it is not written into the app file. The free tier has usage limits and is not unlimited.</p>
+    <p><a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--ac)">Open Groq Console — API keys ↗</a></p>
+    <label for="groqkey">Groq API key</label>
+    <input id="groqkey" class="w" type="password" autocomplete="off" placeholder="Paste your Groq API key here" value="${existing.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">
+    <div class="row" style="margin-top:10px"><button class="b" onclick="saveGroqKey()">Save key</button><button class="b" onclick="testGroqKey()">Test connection</button><button class="b" onclick="clearGroqKey()">Forget key</button></div>
     <div id="keystatus" class="dim">Key ${existing?"saved on this device":"not set"}.</div>
-    <p class="dim">Security: this is a personal prototype. A key used in a browser can be exposed to someone with access to this device/browser. Restrict it to the Gemini API, monitor quota, and do not publish a shared app with a private key embedded in it.</p>
+    <p class="dim">Security: this is a personal prototype. Do not embed a private API key directly in a public app's source code. Anyone with access to this browser profile may be able to use the saved key. Monitor your Groq usage and keep billing disabled if you want to avoid charges.</p>
   </div>`;
 }
-function saveGemKey(){
-  const k=$("#gemkey").value.trim();
+function saveGroqKey(){
+  const k=$("#groqkey").value.trim();
   if(!k){$("#keystatus").textContent="Paste a key first.";return}
-  localStorage.setItem("mrl_gemini_key",k);
+  localStorage.setItem("mrl_groq_key",k);
   $("#keystatus").textContent="Key saved in this browser. Tap Test connection.";
-  $("#st").textContent="// Gemini key saved";
+  $("#st").textContent="// Groq key saved";
 }
-function clearGemKey(){
-  localStorage.removeItem("mrl_gemini_key");
-  $("#gemkey").value="";
+function clearGroqKey(){
+  localStorage.removeItem("mrl_groq_key");
+  $("#groqkey").value="";
   $("#keystatus").textContent="Key removed from this browser.";
   $("#st").textContent="// AI key not set";
 }
-async function testGemKey(){
-  const k=$("#gemkey").value.trim();
+async function testGroqKey(){
+  const k=$("#groqkey").value.trim();
   if(!k){$("#keystatus").textContent="Paste a key first.";return}
-  localStorage.setItem("mrl_gemini_key",k);
+  localStorage.setItem("mrl_groq_key",k);
   $("#keystatus").textContent="Testing connection…";
   try{
-    const r=await standaloneGemini("Reply with exactly: Mr L connected.",{});
+    const r=await standaloneGroq("Reply with exactly: Mr L connected.",{});
     $("#keystatus").textContent="Connection successful: "+r.text;
-    $("#st").textContent="// Gemini connected";
+    $("#st").textContent="// Groq connected";
   }catch(e){$("#keystatus").textContent="Connection failed: "+e.message}
 }
 /* matrix rain */
@@ -146,35 +146,21 @@ function go(t){tab=t;nav();({chat,elite,cross,drill,vault,trends,syl:syl2,settin
 const so=()=>Object.keys(SUBJ).map(s=>`<option>${s}</option>`).join("");
 const chs=s=>SUBJ[s].map(c=>`<option>${c}</option>`).join("");
 function fillCh(sel,ch){$(ch).innerHTML=chs($(sel).value)}
-function md(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
-/* Render LaTeX after dynamic content changes, without repeatedly typesetting every streamed token. */
-let mathRenderTimer=null, mathRendering=false;
-function renderMrLMath(){
-  if(mathRendering || !window.MathJax || !window.MathJax.typesetPromise) return;
-  const root=$("#v"); if(!root) return;
-  mathRendering=true;
-  try{window.MathJax.typesetClear([root]);
-    window.MathJax.typesetPromise([root]).catch(()=>{}).finally(()=>{mathRendering=false;});
-  }catch(_){mathRendering=false;}
+function md(t){return t.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+// Render LaTeX in AI answers and study questions instead of showing raw commands.
+function typesetMath(el){
+  if(!el) return;
+  const run=()=>{if(window.MathJax && MathJax.typesetPromise){try{MathJax.typesetClear([el]);}catch(_){} MathJax.typesetPromise([el]).catch(()=>{});}};
+  if(window.MathJax && MathJax.startup && MathJax.startup.promise){MathJax.startup.promise.then(run).catch(()=>{});}
+  else {window.addEventListener("load",run,{once:true}); setTimeout(run,1800);}
 }
-function queueMrLMath(){clearTimeout(mathRenderTimer);mathRenderTimer=setTimeout(renderMrLMath,650)}
-const mathObserver=new MutationObserver(records=>{
-  const relevant=records.some(m=>{
-    const t=m.target; const el=t.nodeType===1?t:t.parentElement;
-    if(el && el.closest && el.closest('mjx-container')) return false;
-    return [...(m.addedNodes||[])].some(n=>!(n.nodeType===1 && (n.matches('mjx-container') || n.closest('mjx-container')))) || m.type==='characterData';
-  });
-  if(relevant) queueMrLMath();
-});
-const mathRoot=$("#v"); if(mathRoot) mathObserver.observe(mathRoot,{childList:true,subtree:true,characterData:true});
-window.addEventListener('load',()=>setTimeout(queueMrLMath,1200));
 /* chat */
 function chat(){$("#v").innerHTML=`<div id="log"></div><div class="row" style="position:sticky;bottom:0"><textarea id="q" rows="2" placeholder="Ask Mr L anything…"></textarea><button class="b" onclick="send()">Send</button></div>`;
 hist.forEach(m=>add(m.role=="user"?"me":"ai",m.content));if(!hist.length)add("ai","Good day. Mr L at your service. Chemistry, Physics, Maths: what shall we conquer first?")}
-function add(c,t){const d=document.createElement("div");d.className="msg "+c;d.textContent=t;$("#log").appendChild(d);$("#v").scrollTop=1e9;return d}
+function add(c,t){const d=document.createElement("div");d.className="msg "+c;d.textContent=t;$("#log").appendChild(d);typesetMath(d);$("#v").scrollTop=1e9;return d}
 async function send(){const q=$("#q").value.trim();if(!q)return;$("#q").value="";add("me",q);hist.push({role:"user",content:q});const el=add("ai","Thinking…");
 try{const msgs=hist.slice(-12).map(m=>({role:m.role,content:m.content}));msgs[0]={role:"user",content:SYS+"\n\n"+msgs[0].content};
-const r=await sample(msgs,{cache:false,modelTier:"complex",onText:({text})=>{el.textContent=text;$("#v").scrollTop=1e9}});hist.push({role:"assistant",content:r.text});el.textContent=r.text}catch(e){el.textContent="Apologies: "+(e.message||"link failed");hist.pop()}}
+const r=await sample(msgs,{cache:false,modelTier:"complex",onText:({text})=>{el.textContent=text;typesetMath(el);$("#v").scrollTop=1e9}});hist.push({role:"assistant",content:r.text});el.textContent=r.text;typesetMath(el)}catch(e){el.textContent="Apologies: "+(e.message||"link failed");typesetMath(el);hist.pop()}}
 /* generator pages */
 function gen(kind){return`<div class="card"><div class="row"><select id="s" onchange="fillCh('#s','#c')">${so()}</select><select id="c">${chs("Chemistry")}</select><button class="b" onclick="run('${kind}')">Generate</button></div><div id="out" class="dim">Ready when you are.</div></div>`}
 function elite(){$("#v").innerHTML=gen("elite")}
@@ -182,8 +168,8 @@ function cross(){$("#v").innerHTML=`<div class="card"><div class="row"><select i
 async function run(k){const o=$("#out");o.textContent="Composing a worthy challenge…";let p;
 if(k=="elite")p=`Write ONE extremely hard, elite Cambridge A-Level ${$("#s").value} question on "${$("#c").value}". It must require deep chapter knowledge plus logical, out-of-the-box thinking, in strict Cambridge structured style (parts (a),(b),(c) with marks), fully within the syllabus. Then, after a line '=== MARK SCHEME ===', give a full mark scheme with method marks (M), accuracy (A), and key examiner notes.`;
 else p=`Write ONE hard Cambridge-style crossover question combining ${$("#s1").value} and ${$("#s2").value}${$("#t").value?" focusing on "+$("#t").value:""}, where answering needs real A-Level Maths techniques (e.g. integration, differential equations, partial fractions, binomial expansion) applied inside the science context (e.g. rate equations, equilibria, kinematics). Cambridge structured format with marks, within both syllabuses. Then after '=== MARK SCHEME ===' give a full mark scheme.`;
-try{if(!sample){try{sample=await claude.use("sample")}catch(_){}}const r=await ask(p,{modelTier:"default",onText:({text})=>{o.innerHTML='<div class="msg ai">'+md(text)+'</div>'}});const[q,m]=r.text.split("=== MARK SCHEME ===");
-o.innerHTML=`<div class="msg ai">${md(q)}</div>${m?`<button class="b" onclick="this.nextElementSibling.hidden=false;this.hidden=true">Reveal mark scheme</button><div class="msg ai" hidden>${md(m)}</div>`:""}`}catch(e){o.textContent="Failed: "+(e.code||"")+" "+(e.message||e)+(e.text?"\n\nPartial:\n"+e.text:"")}}
+try{if(!sample){try{sample=await claude.use("sample")}catch(_){}}const r=await ask(p,{modelTier:"default",onText:({text})=>{o.innerHTML='<div class="msg ai">'+md(text)+'</div>';typesetMath(o)}});const[q,m]=r.text.split("=== MARK SCHEME ===");
+o.innerHTML=`<div class="msg ai">${md(q)}</div>${m?`<button class="b" onclick="this.nextElementSibling.hidden=false;this.hidden=true;typesetMath(this.nextElementSibling)">Reveal mark scheme</button><div class="msg ai" hidden>${md(m)}</div>`:""}`;typesetMath(o)}catch(e){o.textContent="Failed: "+(e.code||"")+" "+(e.message||e)+(e.text?"\n\nPartial:\n"+e.text:"")}}
 /* drills */
 let cur=null;
 function key(s,c){return s+"|"+c}
@@ -194,11 +180,11 @@ try{const r=await ask(`Create 10 rapid Cambridge A-Level ${s} paper-1 style mult
 const arr=JSON.parse(r.text.replace(/```json|```/g,"").trim());D.bank[k]=(D.bank[k]||[]).concat(arr);save()}catch(e){alert("Could not generate: "+e.message)}info()}
 function start(){const s=$("#s").value,c=$("#c").value,k=key(s,c),b=D.bank[k]||[];if(!b.length){$("#qa").innerHTML='<div class="card dim">No questions saved yet. Tap “Generate 10 more” while online.</div>';return}
 const w=D.stat[k]&&D.stat[k].wrong||[];const pool=b.map((q,i)=>i).sort((x,y)=>(w.includes(y)-w.includes(x))||Math.random()-.5);cur={k,pool,i:0};show()}
-function show(){const q=D.bank[cur.k][cur.pool[cur.i%cur.pool.length]];$("#qa").innerHTML=`<div class="card"><div class="dim">Question ${cur.i+1}</div><p>${md(q.q)}</p>${q.o.map((o,j)=>`<button class="b opt" onclick="pick(${j},this)">${"ABCD"[j]}. ${md(o)}</button>`).join("")}<div id="ex"></div></div>`}
+function show(){const q=D.bank[cur.k][cur.pool[cur.i%cur.pool.length]];$("#qa").innerHTML=`<div class="card"><div class="dim">Question ${cur.i+1}</div><p>${md(q.q)}</p>${q.o.map((o,j)=>`<button class="b opt" onclick="pick(${j},this)">${"ABCD"[j]}. ${md(o)}</button>`).join("")}<div id="ex"></div></div>`;typesetMath($("#qa"))}
 function pick(j,el){const id=cur.pool[cur.i%cur.pool.length],q=D.bank[cur.k][id],s=D.stat[cur.k]=D.stat[cur.k]||{a:0,c:0,wrong:[]};s.wrong=s.wrong||[];s.a++;
 document.querySelectorAll(".opt").forEach((b,i)=>{b.disabled=true;if(i==q.a)b.classList.add("r")});
 if(j==q.a){s.c++;s.wrong=s.wrong.filter(x=>x!=id)}else{el.classList.add("w");if(!s.wrong.includes(id))s.wrong.push(id)}save();
-$("#ex").innerHTML=`<p class="dim">${md(q.e||"")}</p><button class="b" onclick="cur.i++;show()">Next</button>`}
+$("#ex").innerHTML=`<p class="dim">${md(q.e||"")}</p><button class="b" onclick="cur.i++;show()">Next</button>`;typesetMath($("#ex"))}
 /* vault */
 D.vault=D.vault||{papers:{}};
 const SC={9701:'Chemistry',9702:'Physics',9709:'Maths'},PJ='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -233,15 +219,15 @@ async function tr(){const s=$("#s").value,o=$("#tout"),pp=$("#pp").value.trim();
 const me=SUBJ[s].map(c=>{const t=D.stat[key(s,c)];return t&&t.a?c+": "+Math.round(100*t.c/t.a)+"% of "+t.a:null}).filter(Boolean).join("; ")||"no data yet";
 try{const r=await ask(`Analyse Cambridge International AS & A Level ${s} (${CODE[s]}) exam trends. Chapters: ${JSON.stringify(SUBJ[s])}. ${pp?"Past-paper data supplied by the student (weigh this most): "+pp:"No past-paper data supplied: rely on your knowledge of past papers and examiner reports, and say so."} Student accuracy so far: ${me}. Real counts from the student's own past-paper vault (treat as primary evidence, count-based): ${vs(s)}. Reply with ONLY JSON: {"chapters":[{"c":"exact chapter name","l":"High|Medium|Low","why":"one short sentence on frequency and typical question type"}],"styles":["recurring question styles or command words"],"plan":"a focused revision plan weighting likely chapters against the student's weak ones"}. Include every chapter. Be honest about uncertainty.`,{modelTier:"default"});
 const j=JSON.parse(r.text.replace(/```json|```/g,"").trim()),rk={High:0,Medium:1,Low:2},col={High:"var(--no)",Medium:"#ffd24d",Low:"var(--dim)"};
-o.innerHTML=`<div class="card"><b style="color:var(--ac)">Likelihood ranking</b>${j.chapters.sort((a,b)=>rk[a.l]-rk[b.l]).map(x=>`<div style="margin-top:8px"><b style="color:${col[x.l]}">${x.l}</b> · ${md(x.c)}<div class="dim">${md(x.why)}</div></div>`).join("")}</div><div class="card"><b style="color:var(--ac)">Question styles</b><div class="msg ai" style="margin-top:8px">${j.styles.map(md).join("\n• ").replace(/^/,"• ")}</div></div><div class="card"><b style="color:var(--ac)">Your revision plan</b><div class="msg ai" style="margin-top:8px">${md(j.plan)}</div></div>`}catch(e){o.innerHTML='<div class="card">Analysis failed: '+md(e.message||String(e))+'. Try again.</div>'}}
+o.innerHTML=`<div class="card"><b style="color:var(--ac)">Likelihood ranking</b>${j.chapters.sort((a,b)=>rk[a.l]-rk[b.l]).map(x=>`<div style="margin-top:8px"><b style="color:${col[x.l]}">${x.l}</b> · ${md(x.c)}<div class="dim">${md(x.why)}</div></div>`).join("")}</div><div class="card"><b style="color:var(--ac)">Question styles</b><div class="msg ai" style="margin-top:8px">${j.styles.map(md).join("\n• ").replace(/^/,"• ")}</div></div><div class="card"><b style="color:var(--ac)">Your revision plan</b><div class="msg ai" style="margin-top:8px">${md(j.plan)}</div></div>`;typesetMath(o)}catch(e){o.innerHTML='<div class="card">Analysis failed: '+md(e.message||String(e))+'. Try again.</div>'}}
 /* syllabus with objectives */
 const CODE={Chemistry:"9701",Physics:"9702",Maths:"9709"};
 function syl2(){D.obj=D.obj||{};$("#v").innerHTML='<div class="card dim">Tap any chapter to open its learning objectives. They are fetched once, then saved for offline use. Always check against the official Cambridge syllabus PDF for the exact wording.</div>'+Object.entries(SUBJ).map(([s,l])=>`<div class="card"><b style="color:var(--ac)">${s} ${CODE[s]} · ${l.length} chapters</b>${l.map((c,i)=>{const t=D.stat[key(s,c)]||{a:0,c:0},p=t.a?Math.round(100*t.c/t.a):0;return`<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;cursor:pointer;gap:8px" onclick="tg('${s}',${i})"><span>▸ ${c}</span><span class="dim">${t.a?p+'%':'new'}</span></div><div class="bar"><i style="width:${p}%"></i></div><div id="o${s}${i}" class="msg ai" hidden style="margin:8px 0 0"></div></div>`}).join("")}</div>`).join("")}
 async function tg(s,i){const el=document.getElementById("o"+s+i);if(!el.hidden){el.hidden=true;return}el.hidden=false;const c=SUBJ[s][i],k="obj|"+s+"|"+c;if(D.obj[k]){el.textContent=D.obj[k];return}el.textContent="Retrieving learning objectives…";
-try{const r=await ask(`List the learning outcomes for Cambridge International AS & A Level ${s} (${CODE[s]}), topic "${c}" (current syllabus). Organise by sub-topic number (e.g. 1.1, 1.2) with numbered outcomes under each, following the official syllabus structure and wording as closely as you can. Mark any point you are not certain of with (verify). Plain text only: no markdown symbols, no preamble, no closing remarks.`,{modelTier:"default",onText:({text})=>{el.textContent=text}});D.obj[k]=r.text;save();el.textContent=r.text}catch(e){el.textContent="Could not load: "+(e.message||e)}}
+try{const r=await ask(`List the learning outcomes for Cambridge International AS & A Level ${s} (${CODE[s]}), topic "${c}" (current syllabus). Organise by sub-topic number (e.g. 1.1, 1.2) with numbered outcomes under each, following the official syllabus structure and wording as closely as you can. Mark any point you are not certain of with (verify). Plain text only: no markdown symbols, no preamble, no closing remarks.`,{modelTier:"default",onText:({text})=>{el.textContent=text}});D.obj[k]=r.text;save();el.textContent=r.text;typesetMath(el)}catch(e){el.textContent="Could not load: "+(e.message||e);typesetMath(el)}}
 /* syllabus */
 function syl(){$("#v").innerHTML=Object.entries(SUBJ).map(([s,l])=>`<div class="card"><b style="color:var(--ac)">${s}</b>${l.map(c=>{const t=D.stat[key(s,c)]||{a:0,c:0},p=t.a?Math.round(100*t.c/t.a):0;return`<div style="margin-top:10px"><div style="display:flex;justify-content:space-between"><span>${c}</span><span class="dim">${t.a?p+"% · "+t.a+" attempts":"not started"}</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`}).join("")}</div>`).join("")}
-$("#st").textContent=localStorage.getItem("mrl_gemini_key")?"// Gemini key saved":"// AI key not set";
+$("#st").textContent=localStorage.getItem("mrl_groq_key")?"// Groq key saved":"// AI key not set";
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
 }
